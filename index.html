@@ -353,7 +353,9 @@ function bookForm(b){return `
     <button data-c="other" class="${b&&b.category==='other'?'on other':''}">독서외</button>
   </div>
   <label class="f">태그 (공백 구분, # 생략 가능)</label>
-  <input type="text" id="fTags" value="${b?(b.tags||[]).join(' '):''}" placeholder="예: 투운사 자격증">`;}
+  <input type="text" id="fTags" value="${b?(b.tags||[]).join(' '):''}" placeholder="예: 투운사 자격증">
+  <label class="f">현재 회독 (실수로 올렸다면 여기서 되돌리세요)</label>
+  <input type="number" id="fRound" min="1" max="99" value="${b?(b.round||1):1}">`;}
 function bindCatToggle(){let cat=$("fCat").querySelector('.on').dataset.c;
   $("fCat").querySelectorAll('button').forEach(btn=>btn.onclick=()=>{cat=btn.dataset.c;
     $("fCat").querySelectorAll('button').forEach(x=>x.className="");btn.className="on "+cat;});
@@ -362,7 +364,8 @@ function addBookFlow(){openSheet(`<h2>교재 추가</h2>${bookForm(null)}
   <button class="btn btn-grad btn-block" id="fSave" style="margin-top:16px">추가</button>`);
   const getCat=bindCatToggle();
   $("fSave").onclick=async()=>{const name=$("fName").value.trim();if(!name){toast("이름을 입력하세요");return;}
-    const id=await put("books",{name,category:getCat(),tags:parseTags($("fTags").value),round:1,createdAt:new Date().toISOString(),archived:false});
+    const rd=Math.min(99,Math.max(1,parseInt($("fRound").value,10)||1));
+    const id=await put("books",{name,category:getCat(),tags:parseTags($("fTags").value),round:rd,createdAt:new Date().toISOString(),archived:false});
     closeSheet();await reload();if(!selBookId)selBookId=id;renderChips();renderSW();toast("추가됨");};}
 function editBookFlow(b){openSheet(`<h2>교재 편집</h2>${bookForm(b)}
   <div class="set-item" style="margin-top:12px"><div>보관 (목록에서 숨김)</div>
@@ -370,7 +373,8 @@ function editBookFlow(b){openSheet(`<h2>교재 편집</h2>${bookForm(b)}
   <button class="btn btn-grad btn-block" id="fSave" style="margin-top:8px">저장</button>`);
   const getCat=bindCatToggle();
   $("fSave").onclick=async()=>{b.name=$("fName").value.trim()||b.name;b.category=getCat();b.tags=parseTags($("fTags").value);b.archived=$("fArch").checked;
-    await put("books",b);closeSheet();await reload();toast("저장됨");};}
+    b.round=Math.min(99,Math.max(1,parseInt($("fRound").value,10)||b.round||1));
+    await put("books",b);closeSheet();await reload();toast("저장됨 · 현재 "+b.round+"회독");};}
 
 /* 잔디 렌더 */
 function renderHeat(el,filterFn,palette){el.innerHTML="";
