@@ -160,6 +160,9 @@
   .unit-toggle{display:flex;gap:6px;flex-wrap:wrap}
   .unit-toggle button{background:var(--soft);border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:9px 15px;font-size:14px;font-weight:600;cursor:pointer}
   .unit-toggle button.on{background:var(--reading-soft);color:var(--reading);border-color:transparent}
+  .goal-sug{display:none;flex-direction:column;gap:4px;margin-top:6px}
+  .sug-item{text-align:left;background:var(--soft);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:10px 12px;font-size:14px;cursor:pointer;width:100%}
+  .sug-item .stag{color:var(--muted);font-size:12px;margin-left:6px}
 </style>
 </head>
 <body>
@@ -180,6 +183,8 @@
     <!-- 타이머 -->
     <section id="v-timer" class="view active">
       <div class="section-title">교재 선택</div>
+      <input type="text" id="timerSearch" placeholder="교재 이름 검색" style="margin-bottom:8px">
+      <div class="book-chips" id="timerTags"></div>
       <div class="book-chips" id="bookChips"></div>
       <div class="card">
         <div class="stopwatch">
@@ -197,7 +202,10 @@
 
     <!-- 교재 -->
     <section id="v-books" class="view">
-      <div class="section-title">교재 목록</div>
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>교재 목록</span>
+        <button id="toggleArch" class="mini" style="display:none;text-transform:none;letter-spacing:0">보관 보기</button>
+      </div>
       <div id="bookList"></div>
       <button class="btn btn-grad btn-block" id="addBook" style="margin-top:6px">＋ 교재 추가</button>
     </section>
@@ -348,9 +356,21 @@ function loops(on){clearInterval(swInt);clearInterval(cpInt);swInt=cpInt=null;
   if(on){swInt=setInterval(()=>$("swTime").textContent=fmtClock(elapsedMs()),1000);cpInt=setInterval(checkpoint,10000);}}
 
 /* 타이머 렌더 */
-function renderChips(){const c=$("bookChips");c.innerHTML="";
-  const act=books.filter(b=>!b.archived);
-  if(!act.length){c.innerHTML='<span class="muted small" style="padding:8px 0">교재 탭에서 교재를 먼저 추가하세요.</span>';return;}
+let timerTag=null, timerSearch="", showArchived=false;
+function renderTimerTags(){const c=$("timerTags");const tags=allTags();
+  if(!tags.length){c.style.display="none";c.innerHTML="";return;}
+  c.style.display="flex";c.innerHTML="";
+  const mk=(label,val)=>{const el=document.createElement("button");
+    el.className="chip"+(timerTag===val?" sel reading":"");el.textContent=label;
+    el.onclick=()=>{timerTag=val;renderTimerTags();renderChips();};return el;};
+  c.appendChild(mk("전체",null));
+  tags.forEach(t=>c.appendChild(mk("#"+t,t)));}
+function renderChips(){renderTimerTags();const c=$("bookChips");c.innerHTML="";
+  const q=timerSearch.trim().toLowerCase();
+  const act=books.filter(b=>!b.archived
+    && (timerTag?(b.tags||[]).includes(timerTag):true)
+    && (q?b.name.toLowerCase().includes(q):true));
+  if(!act.length){c.innerHTML='<span class="muted small" style="padding:8px 0">'+(books.filter(b=>!b.archived).length?'조건에 맞는 교재가 없습니다.':'교재 탭에서 교재를 먼저 추가하세요.')+'</span>';return;}
   act.forEach(b=>{const el=document.createElement("button");
     el.className="chip"+(b.id===selBookId?" sel "+(b.category||'reading'):"");
     el.innerHTML=`<span class="cdot" style="background:${catColor(b.category)}"></span>${esc(b.name)}`;
@@ -371,8 +391,16 @@ function refreshTotals(){const t=sessions.filter(s=>s.dateKey===dateKey()).reduc
 
 /* 교재 렌더 */
 function renderBooks(){const w=$("bookList");w.innerHTML="";
-  if(!books.length){w.innerHTML='<div class="empty">등록된 교재가 없습니다.<br>아래 버튼으로 첫 교재를 추가하세요.</div>';return;}
-  books.forEach(b=>{const sec=sessions.filter(s=>s.bookId===b.id).reduce((a,s)=>a+s.seconds,0);
+  if(!books.length){w.innerHTML='<div class="empty">등록된 교재가 없습니다.<br>아래 버튼으로 첫 교재를 추가하세요.</div>';
+    $("toggleArch").style.display="none";return;}
+  const archived=books.filter(b=>b.archived);
+  const t=$("toggleArch");
+  if(archived.length){t.style.display="block";t.textContent=showArchived?("보관 숨기기"):("보관 "+archived.length+"개 보기");
+    t.onclick=()=>{showArchived=!showArchived;renderBooks();};}
+  else t.style.display="none";
+  const list=showArchived?books:books.filter(b=>!b.archived);
+  if(!list.length){w.innerHTML='<div class="empty small">표시할 교재가 없습니다. 위 "보관 보기"로 보관 교재를 확인하세요.</div>';return;}
+  list.forEach(b=>{const sec=sessions.filter(s=>s.bookId===b.id).reduce((a,s)=>a+s.seconds,0);
     const el=document.createElement("div");el.className="item";
     const tagsHtml=(b.tags||[]).map(t=>`<span class="tagpill">#${esc(t)}</span>`).join("");
     el.innerHTML=`<span class="cdot" style="background:${catColor(b.category)}"></span>
@@ -381,10 +409,10 @@ function renderBooks(){const w=$("bookList");w.innerHTML="";
       <div class="tags">${tagsHtml}</div></div>
       <div class="acts"><button class="mini" data-a="round">다음 회독</button>
       <button class="mini" data-a="edit">편집</button><button class="mini warn" data-a="del">삭제</button></div>`;
-    el.querySelector('[data-a=round]').onclick=async()=>{b.round=(b.round||1)+1;await put("books",b);await reload();toast(b.name+" → "+b.round+"회독");};
+    el.querySelector('[data-a=round]').onclick=async()=>{b.round=(b.round||0)+1;await put("books",b);await reload();toast(b.name+" → "+b.round+"회독");};
     el.querySelector('[data-a=edit]').onclick=()=>editBookFlow(b);
     el.querySelector('[data-a=del]').onclick=async()=>{const cnt=sessions.filter(s=>s.bookId===b.id).length;
-      if(confirm(`'${b.name}' 삭제? 관련 기록 ${cnt}건도 함께 삭제됩니다.`)){
+      if(confirm(`'${b.name}'을(를) 삭제하면 관련 시간 기록 ${cnt}건도 함께 사라져 통계·연간 잔디에서 빠집니다.\n\n목록만 정리하려면 삭제 대신 편집 → 보관을 쓰세요. 보관하면 기록은 통계에 그대로 남습니다.\n\n그래도 삭제할까요?`)){
         for(const s of sessions.filter(s=>s.bookId===b.id))await del("sessions",s.id);
         await del("books",b.id);if(selBookId===b.id)selBookId=null;await reload();toast("삭제됨");}};
     w.appendChild(el);});}
@@ -398,8 +426,8 @@ function bookForm(b){return `
   </div>
   <label class="f">태그 (공백 구분, # 생략 가능)</label>
   <input type="text" id="fTags" value="${b?(b.tags||[]).join(' '):''}" placeholder="예: 투운사 자격증">
-  <label class="f">현재 회독 (실수로 올렸다면 여기서 되돌리세요)</label>
-  <input type="number" id="fRound" min="1" max="99" value="${b?(b.round||1):1}">`;}
+  <label class="f">현재 회독 (신규 등록은 0회독, 실수로 올렸다면 여기서 되돌리세요)</label>
+  <input type="number" id="fRound" min="0" max="99" value="${b?(b.round||0):0}">`;}
 function bindCatToggle(){let cat=$("fCat").querySelector('.on').dataset.c;
   $("fCat").querySelectorAll('button').forEach(btn=>btn.onclick=()=>{cat=btn.dataset.c;
     $("fCat").querySelectorAll('button').forEach(x=>x.className="");btn.className="on "+cat;});
@@ -408,7 +436,7 @@ function addBookFlow(){openSheet(`<h2>교재 추가</h2>${bookForm(null)}
   <button class="btn btn-grad btn-block" id="fSave" style="margin-top:16px">추가</button>`);
   const getCat=bindCatToggle();
   $("fSave").onclick=async()=>{const name=$("fName").value.trim();if(!name){toast("이름을 입력하세요");return;}
-    const rd=Math.min(99,Math.max(1,parseInt($("fRound").value,10)||1));
+    const rd=Math.min(99,Math.max(0,parseInt($("fRound").value,10)||0));
     const id=await put("books",{name,category:getCat(),tags:parseTags($("fTags").value),round:rd,createdAt:new Date().toISOString(),archived:false});
     closeSheet();await reload();if(!selBookId)selBookId=id;renderChips();renderSW();toast("추가됨");};}
 function editBookFlow(b){openSheet(`<h2>교재 편집</h2>${bookForm(b)}
@@ -417,7 +445,7 @@ function editBookFlow(b){openSheet(`<h2>교재 편집</h2>${bookForm(b)}
   <button class="btn btn-grad btn-block" id="fSave" style="margin-top:8px">저장</button>`);
   const getCat=bindCatToggle();
   $("fSave").onclick=async()=>{b.name=$("fName").value.trim()||b.name;b.category=getCat();b.tags=parseTags($("fTags").value);b.archived=$("fArch").checked;
-    b.round=Math.min(99,Math.max(1,parseInt($("fRound").value,10)||b.round||1));
+    b.round=Math.min(99,Math.max(0,isNaN(parseInt($("fRound").value,10))?(b.round||0):parseInt($("fRound").value,10)));
     await put("books",b);closeSheet();await reload();toast("저장됨 · 현재 "+b.round+"회독");};}
 
 /* 잔디 렌더 */
@@ -600,7 +628,8 @@ function renderPlanDay(){
   $("addGoal").onclick=()=>goalFlow(null);
 }
 function goalForm(pl){const u=pl?pl.unit:"round";
-  return `<label class="f">내용 (교재·목표 이름)</label><input type="text" id="gTitle" value="${pl?esc(pl.title):''}" placeholder="예: 프리미엄 강의노트 43강">
+  return `<label class="f">내용 (교재·목표 이름)</label><input type="text" id="gTitle" value="${pl?esc(pl.title):''}" placeholder="입력하거나 등록 교재에서 선택" autocomplete="off">
+  <div class="goal-sug" id="gSug"></div>
   <label class="f">단위</label>
   <div class="unit-toggle" id="gUnit">
     ${["round","page","lecture","etc"].map(x=>`<button data-u="${x}" class="${x===u?'on':''}">${x==='round'?'회독':x==='page'?'페이지':x==='lecture'?'강':'기타'}</button>`).join("")}
@@ -610,6 +639,16 @@ function goalFlow(pl){
   openSheet(`<h2>${pl?'목표 수정':'목표 추가'} · ${dateKey(planDate)}</h2>${goalForm(pl)}
     <button class="btn btn-grad btn-block" id="gSave" style="margin-top:16px">${pl?'저장':'추가'}</button>`);
   let unit=pl?pl.unit:"round";
+  const gt=$("gTitle"),gs=$("gSug");
+  function renderSug(){const q=gt.value.trim().toLowerCase();
+    if(!q){gs.style.display="none";gs.innerHTML="";return;}
+    const m=books.filter(b=>b.name.toLowerCase().includes(q)).slice(0,6);
+    if(!m.length||(m.length===1&&m[0].name===gt.value.trim())){gs.style.display="none";gs.innerHTML="";return;}
+    gs.style.display="flex";gs.innerHTML="";
+    m.forEach(b=>{const btn=document.createElement("button");btn.type="button";btn.className="sug-item";
+      btn.innerHTML=`${esc(b.name)}<span class="stag">${b.category==='other'?'독서외':'독서'}${b.archived?' · 보관':''}</span>`;
+      btn.onclick=()=>{gt.value=b.name;gs.style.display="none";gs.innerHTML="";};gs.appendChild(btn);});}
+  gt.oninput=renderSug;
   $("gUnit").querySelectorAll("button").forEach(btn=>btn.onclick=()=>{unit=btn.dataset.u;
     $("gUnit").querySelectorAll("button").forEach(x=>x.classList.remove("on"));btn.classList.add("on");});
   $("gSave").onclick=async()=>{const title=$("gTitle").value.trim();if(!title){toast("내용을 입력하세요");return;}
@@ -637,6 +676,7 @@ $("heatSeg").querySelectorAll("button").forEach(b=>b.onclick=()=>{heatFilter=b.d
 $("swStart").onclick=()=>{if(active&&active.running)swPause();else swStart();};
 $("swStop").onclick=swStop;
 $("addBook").onclick=addBookFlow;$("addSession").onclick=addSessionFlow;$("speedBook").onchange=renderSpeed;
+$("timerSearch").oninput=e=>{timerSearch=e.target.value;renderChips();};
 
 async function reload(){books=await allOf("books");sessions=await allOf("sessions");plans=await allOf("plans");
   renderChips();renderSW();refreshTotals();
