@@ -134,6 +134,32 @@
   .toast{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);
     background:#22223a;color:#fff;padding:11px 18px;border-radius:999px;font-size:14px;opacity:0;pointer-events:none;transition:.3s;z-index:60}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .plan-nav{display:flex;align-items:center;gap:8px;margin:6px 0 12px}
+  .pnav{background:var(--card);border:1px solid var(--line);color:var(--text);width:38px;height:38px;border-radius:10px;font-size:18px;cursor:pointer}
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+  .cal .dow{text-align:center;font-size:11px;color:var(--muted);font-weight:600;padding:2px 0}
+  .cal .cell{background:var(--card);border:1px solid var(--line);border-radius:10px;min-height:66px;padding:5px 5px 4px;cursor:pointer;overflow:hidden}
+  .cal .cell.blank{background:transparent;border:none;cursor:default}
+  .cal .cell.today{border-color:var(--other);border-width:2px}
+  .cal .cell .dnum{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:2px}
+  .cal .cell.today .dnum{color:var(--other)}
+  .cal .pl{font-size:10px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:1px}
+  .pl-done{color:#3a9d6a}
+  .pl-past{color:#a6a6b0}
+  .pl-today{color:#3f8fd0}
+  .pl-future{color:#a89ae0}
+  .cal .more{font-size:9px;color:var(--muted)}
+  .goal{display:flex;align-items:center;gap:11px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 13px;margin-bottom:8px}
+  .goal .chk{width:28px;height:28px;border-radius:50%;border:2px solid var(--line);flex:none;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;cursor:pointer;color:transparent}
+  .goal .chk.on{background:#3a9d6a;border-color:#3a9d6a;color:#fff}
+  .goal .gt{flex:1;min-width:0}
+  .goal .gt .gnm{font-weight:600;font-size:15px}
+  .goal .gt .gnm.done{color:#3a9d6a;text-decoration:line-through;text-decoration-color:#a9dcc0}
+  .goal .gt .gu{font-size:12px;color:var(--muted);margin-top:2px}
+  .goal .gact{display:flex;gap:5px;flex:none}
+  .unit-toggle{display:flex;gap:6px;flex-wrap:wrap}
+  .unit-toggle button{background:var(--soft);border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:9px 15px;font-size:14px;font-weight:600;cursor:pointer}
+  .unit-toggle button.on{background:var(--reading-soft);color:var(--reading);border-color:transparent}
 </style>
 </head>
 <body>
@@ -143,6 +169,7 @@
   </header>
   <nav class="tabs">
     <button class="tab active" data-view="timer">타이머</button>
+    <button class="tab" data-view="plan">계획</button>
     <button class="tab" data-view="books">교재</button>
     <button class="tab" data-view="stats">통계</button>
     <button class="tab" data-view="tags">태그</button>
@@ -219,6 +246,22 @@
       <div class="card" id="tagBooks" style="display:none"></div>
     </section>
 
+    <!-- 계획 -->
+    <section id="v-plan" class="view">
+      <div class="seg" id="planSeg" style="width:100%;margin:2px 0 6px">
+        <button class="on" data-m="month" style="flex:1">월간</button>
+        <button data-m="day" style="flex:1">일간</button>
+      </div>
+      <div class="plan-nav">
+        <button class="pnav" id="planPrev">‹</button>
+        <div id="planTitle" style="font-weight:800;font-size:16px">2026년</div>
+        <button class="pnav" id="planNext">›</button>
+        <button class="btn-soft" id="planToday" style="border-radius:10px;padding:8px 12px;font-size:13px;font-weight:600">오늘</button>
+      </div>
+      <div id="planMonth"></div>
+      <div id="planDay"></div>
+    </section>
+
     <!-- 기록 -->
     <section id="v-log" class="view">
       <div class="section-title">세션 기록</div>
@@ -243,12 +286,13 @@ const EMPTY='#e9e9ef';
 const YEAR=new Date().getFullYear();
 
 /* IndexedDB */
-const DBN="study2-db",DBV=1; let db=null;
+const DBN="study2-db",DBV=2; let db=null;
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DBN,DBV);
   r.onupgradeneeded=e=>{const d=e.target.result;
     if(!d.objectStoreNames.contains("books")){d.createObjectStore("books",{keyPath:"id",autoIncrement:true});}
     if(!d.objectStoreNames.contains("sessions")){const s=d.createObjectStore("sessions",{keyPath:"id",autoIncrement:true});s.createIndex("bookId","bookId");s.createIndex("dateKey","dateKey");}
-    if(!d.objectStoreNames.contains("meta")){d.createObjectStore("meta",{keyPath:"key"});}};
+    if(!d.objectStoreNames.contains("meta")){d.createObjectStore("meta",{keyPath:"key"});}
+    if(!d.objectStoreNames.contains("plans")){const p=d.createObjectStore("plans",{keyPath:"id",autoIncrement:true});p.createIndex("date","date");}};
   r.onsuccess=()=>{db=r.result;res();};r.onerror=()=>rej(r.error);});}
 const st=(n,m="readonly")=>db.transaction(n,m).objectStore(n);
 const put=(n,v)=>new Promise((res,rej)=>{const r=st(n,"readwrite").put(v);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});
@@ -486,7 +530,7 @@ $("gear").onclick=()=>{openSheet(`<h2>설정</h2>
 
 /* 내보내기/복원 */
 function download(name,text,type){const b=new Blob([text],{type});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);}
-function exportJSON(){download("study-"+dateKey()+".json",JSON.stringify({v:1,books,sessions},null,2),"application/json");}
+function exportJSON(){download("study-"+dateKey()+".json",JSON.stringify({v:2,books,sessions,plans},null,2),"application/json");}
 function exportMD(){const tot=sessions.reduce((a,s)=>a+s.seconds,0);
   let md=`# 공부시간 기록 (${dateKey()})\n\n총 순공: **${fmtDur(tot)}**\n\n## 교재별\n\n`;
   books.forEach(b=>{const sec=sessions.filter(s=>s.bookId===b.id).reduce((a,s)=>a+s.seconds,0);
@@ -497,17 +541,96 @@ function exportMD(){const tot=sessions.reduce((a,s)=>a+s.seconds,0);
 function importJSON(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();
   r.onload=async()=>{try{const d=JSON.parse(r.result);if(!d.books||!d.sessions)throw 0;
     if(!confirm("현재 데이터를 백업 내용으로 교체합니다. 진행할까요?"))return;
-    await clearS("books");await clearS("sessions");
+    await clearS("books");await clearS("sessions");await clearS("plans");
     for(const b of d.books)await put("books",b);
+    if(d.plans)for(const p of d.plans)await put("plans",p);
     for(const s of d.sessions)await put("sessions",s);
     await reload();closeSheet();toast("복원 완료");}catch(err){toast("올바른 백업 파일이 아닙니다");}};
   r.readAsText(f);}
 
+/* ===== 계획(월/일) — 시간·회독과 완전 분리 ===== */
+let plans=[], planMode="month", planYM={y:new Date().getFullYear(),m:new Date().getMonth()}, planDate=new Date();
+const DOW=["일","월","화","수","목","금","토"];
+const unitLabel=u=>({round:"회독",page:"페이지",lecture:"강",etc:""})[u]||"";
+function goalText(pl){const l=unitLabel(pl.unit);return (pl.value||"")+(l?l:"");}
+function planStatus(pl){if(pl.done)return "done";const t=dateKey();if(pl.date<t)return "past";if(pl.date===t)return "today";return "future";}
+const plansOn=k=>plans.filter(p=>p.date===k).sort((a,b)=>(a.order||0)-(b.order||0));
+
+function renderPlan(){
+  document.querySelectorAll("#planSeg button").forEach(b=>b.classList.toggle("on",b.dataset.m===planMode));
+  if(planMode==="month"){$("planMonth").style.display="block";$("planDay").style.display="none";renderPlanMonth();}
+  else{$("planMonth").style.display="none";$("planDay").style.display="block";renderPlanDay();}
+}
+function renderPlanMonth(){
+  $("planTitle").textContent=planYM.y+"년 "+(planYM.m+1)+"월";
+  const first=new Date(planYM.y,planYM.m,1),last=new Date(planYM.y,planYM.m+1,0);
+  let html='<div class="cal">'+DOW.map(d=>`<div class="dow">${d}</div>`).join("");
+  for(let i=0;i<first.getDay();i++)html+='<div class="cell blank"></div>';
+  const today=dateKey();
+  for(let d=1;d<=last.getDate();d++){
+    const dt=new Date(planYM.y,planYM.m,d),k=dateKey(dt);
+    const items=plansOn(k);
+    let inner=`<div class="dnum">${d}</div>`;
+    items.slice(0,3).forEach(pl=>{inner+=`<div class="pl pl-${planStatus(pl)}">${esc(pl.title)}</div>`;});
+    if(items.length>3)inner+=`<div class="more">+${items.length-3}</div>`;
+    html+=`<div class="cell${k===today?' today':''}" data-k="${k}">${inner}</div>`;
+  }
+  html+="</div>";
+  $("planMonth").innerHTML=html;
+  $("planMonth").querySelectorAll(".cell[data-k]").forEach(c=>c.onclick=()=>{
+    const[y,m,dd]=c.dataset.k.split("-").map(Number);planDate=new Date(y,m-1,dd);planMode="day";renderPlan();});
+}
+function renderPlanDay(){
+  const k=dateKey(planDate);
+  $("planTitle").textContent=k+" ("+DOW[planDate.getDay()]+")";
+  const items=plansOn(k);
+  let html="";
+  if(!items.length)html+='<div class="empty">이 날의 목표가 없습니다.<br>아래 버튼으로 목표를 추가하세요.</div>';
+  items.forEach(pl=>{
+    html+=`<div class="goal"><div class="chk ${pl.done?'on':''}" data-id="${pl.id}">✓</div>
+      <div class="gt"><div class="gnm ${pl.done?'done':''}">${esc(pl.title)}</div><div class="gu">${esc(goalText(pl))}${pl.done?' · 완료':''}</div></div>
+      <div class="gact"><button class="mini" data-edit="${pl.id}">수정</button><button class="mini warn" data-del="${pl.id}">삭제</button></div></div>`;
+  });
+  html+='<button class="btn btn-grad btn-block" id="addGoal" style="margin-top:6px">＋ 목표 추가</button>';
+  $("planDay").innerHTML=html;
+  $("planDay").querySelectorAll(".chk").forEach(c=>c.onclick=async()=>{
+    const pl=plans.find(p=>p.id===parseInt(c.dataset.id,10));if(!pl)return;pl.done=!pl.done;pl.doneAt=pl.done?new Date().toISOString():null;await put("plans",pl);await reloadPlans();renderPlan();});
+  $("planDay").querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>goalFlow(plans.find(p=>p.id===parseInt(b.dataset.edit,10))));
+  $("planDay").querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{if(confirm("이 목표를 삭제할까요?")){await del("plans",parseInt(b.dataset.del,10));await reloadPlans();renderPlan();}});
+  $("addGoal").onclick=()=>goalFlow(null);
+}
+function goalForm(pl){const u=pl?pl.unit:"round";
+  return `<label class="f">내용 (교재·목표 이름)</label><input type="text" id="gTitle" value="${pl?esc(pl.title):''}" placeholder="예: 프리미엄 강의노트 43강">
+  <label class="f">단위</label>
+  <div class="unit-toggle" id="gUnit">
+    ${["round","page","lecture","etc"].map(x=>`<button data-u="${x}" class="${x===u?'on':''}">${x==='round'?'회독':x==='page'?'페이지':x==='lecture'?'강':'기타'}</button>`).join("")}
+  </div>
+  <label class="f">값</label><input type="text" id="gVal" value="${pl?esc(pl.value||''):''}" placeholder="예: 1 · 13~50 · 4~7 · OX퀴즈 1세트">`;}
+function goalFlow(pl){
+  openSheet(`<h2>${pl?'목표 수정':'목표 추가'} · ${dateKey(planDate)}</h2>${goalForm(pl)}
+    <button class="btn btn-grad btn-block" id="gSave" style="margin-top:16px">${pl?'저장':'추가'}</button>`);
+  let unit=pl?pl.unit:"round";
+  $("gUnit").querySelectorAll("button").forEach(btn=>btn.onclick=()=>{unit=btn.dataset.u;
+    $("gUnit").querySelectorAll("button").forEach(x=>x.classList.remove("on"));btn.classList.add("on");});
+  $("gSave").onclick=async()=>{const title=$("gTitle").value.trim();if(!title){toast("내용을 입력하세요");return;}
+    const value=$("gVal").value.trim();
+    if(pl){pl.title=title;pl.unit=unit;pl.value=value;await put("plans",pl);}
+    else await put("plans",{date:dateKey(planDate),title,unit,value,done:false,order:Date.now(),createdAt:new Date().toISOString()});
+    closeSheet();await reloadPlans();renderPlan();toast(pl?"저장됨":"추가됨");};
+}
+async function reloadPlans(){plans=await allOf("plans");}
+
+/* 계획 네비/세그 */
+$("planSeg").querySelectorAll("button").forEach(b=>b.onclick=()=>{planMode=b.dataset.m;renderPlan();});
+$("planPrev").onclick=()=>{if(planMode==="month"){planYM.m--;if(planYM.m<0){planYM.m=11;planYM.y--;}}else planDate.setDate(planDate.getDate()-1);renderPlan();};
+$("planNext").onclick=()=>{if(planMode==="month"){planYM.m++;if(planYM.m>11){planYM.m=0;planYM.y++;}}else planDate.setDate(planDate.getDate()+1);renderPlan();};
+$("planToday").onclick=()=>{const n=new Date();if(planMode==="month"){planYM={y:n.getFullYear(),m:n.getMonth()};}else planDate=new Date();renderPlan();};
+
 /* 네비 */
 function switchView(v){document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active",t.dataset.view===v));
   document.querySelectorAll(".view").forEach(s=>s.classList.remove("active"));$("v-"+v).classList.add("active");
-  const sub={timer:'타이머',books:'교재',stats:'통계',tags:'태그',log:'기록'}[v];$("hSub").textContent="· "+sub;
-  if(v==="stats")renderStats();if(v==="tags")renderTags();if(v==="log")renderLog();if(v==="books")renderBooks();if(v==="timer"){renderChips();renderSW();}}
+  const sub={timer:'타이머',plan:'계획',books:'교재',stats:'통계',tags:'태그',log:'기록'}[v];$("hSub").textContent="· "+sub;
+  if(v==="stats")renderStats();if(v==="tags")renderTags();if(v==="log")renderLog();if(v==="books")renderBooks();if(v==="plan")renderPlan();if(v==="timer"){renderChips();renderSW();}}
 document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>switchView(t.dataset.view));
 $("heatSeg").querySelectorAll("button").forEach(b=>b.onclick=()=>{heatFilter=b.dataset.f;
   $("heatSeg").querySelectorAll("button").forEach(x=>x.classList.remove("on"));b.classList.add("on");renderStats();});
@@ -515,10 +638,10 @@ $("swStart").onclick=()=>{if(active&&active.running)swPause();else swStart();};
 $("swStop").onclick=swStop;
 $("addBook").onclick=addBookFlow;$("addSession").onclick=addSessionFlow;$("speedBook").onchange=renderSpeed;
 
-async function reload(){books=await allOf("books");sessions=await allOf("sessions");
+async function reload(){books=await allOf("books");sessions=await allOf("sessions");plans=await allOf("plans");
   renderChips();renderSW();refreshTotals();
   const cur=document.querySelector(".view.active").id.replace("v-","");
-  if(cur==="books")renderBooks();if(cur==="stats")renderStats();if(cur==="tags")renderTags();if(cur==="log")renderLog();}
+  if(cur==="books")renderBooks();if(cur==="stats")renderStats();if(cur==="tags")renderTags();if(cur==="log")renderLog();if(cur==="plan")renderPlan();}
 
 (async function init(){await openDB();
   const w=await getM("wakeOn");wakeOn=w?!!w.value:false;
