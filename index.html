@@ -166,6 +166,25 @@
   .goal-sug{display:none;flex-direction:column;gap:4px;margin-top:6px}
   .sug-item{text-align:left;background:var(--soft);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:10px 12px;font-size:14px;cursor:pointer;width:100%}
   .sug-item .stag{color:var(--muted);font-size:12px;margin-left:6px}
+  .rm-prog{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(20,20,40,.04)}
+  .rm-prog .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+  .rm-prog .pct{font-weight:800;font-size:18px}
+  .rm-prog .rem{font-size:13px;color:var(--muted)}
+  .rm-bar{height:10px;background:var(--soft);border-radius:6px;overflow:hidden}
+  .rm-bar .fill{height:100%;background:var(--grad);border-radius:6px;transition:width .3s}
+  .rm-item{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:9px;box-shadow:0 1px 3px rgba(20,20,40,.04)}
+  .rm-item .head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .rm-item .cdot{width:10px;height:10px;border-radius:50%;flex:none}
+  .rm-item .nm{font-weight:700;font-size:15px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rm-item .cnt{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;flex:none}
+  .rm-slots{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .slot{width:34px;height:34px;border-radius:50%;border:2px solid var(--line);background:var(--card);color:var(--muted);
+    font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none}
+  .slot.on{background:var(--grad);border-color:transparent;color:#fff}
+  .rm-target{display:flex;align-items:center;gap:2px;margin-left:auto;background:var(--soft);border-radius:9px}
+  .rm-target button{background:none;border:none;color:var(--text);width:30px;height:30px;font-size:16px;cursor:pointer}
+  .rm-target .tv{min-width:24px;text-align:center;font-size:13px;font-weight:700}
+  .rm-hint{font-size:12px;color:var(--muted);margin:2px 4px 0}
 </style>
 </head>
 <body>
@@ -176,6 +195,7 @@
   <nav class="tabs">
     <button class="tab active" data-view="timer">타이머</button>
     <button class="tab" data-view="plan">계획</button>
+    <button class="tab" data-view="roadmap">로드맵</button>
     <button class="tab" data-view="books">교재</button>
     <button class="tab" data-view="stats">통계</button>
     <button class="tab" data-view="tags">태그</button>
@@ -228,7 +248,7 @@
         <div class="heat-scroll"><div class="heat-months" id="heatMonMain"></div><div class="heat" id="heatMain"></div></div>
         <div class="heat-legend">적음
           <span class="lc" style="background:#e9e9ef"></span>
-          <span class="lc" id="lg1"></span><span class="lc" id="lg2"></span><span class="lc" id="lg3"></span><span class="lc" id="lg4"></span>
+          <span class="lc" id="lg1"></span><span class="lc" id="lg2"></span><span class="lc" id="lg3"></span><span class="lc" id="lg4"></span><span class="lc" id="lg5"></span><span class="lc" id="lg6"></span><span class="lc" id="lg7"></span><span class="lc" id="lg8"></span>
           많음</div>
         <div class="heat-total" id="heatTotal">2026년 합계 0분</div>
       </div>
@@ -250,7 +270,7 @@
         <div class="heat-scroll"><div class="heat-months" id="heatMonTag"></div><div class="heat" id="heatTag"></div></div>
         <div class="heat-legend">적음
           <span class="lc" style="background:#e9e9ef"></span>
-          <span class="lc" id="tlg1"></span><span class="lc" id="tlg2"></span><span class="lc" id="tlg3"></span><span class="lc" id="tlg4"></span>
+          <span class="lc" id="tlg1"></span><span class="lc" id="tlg2"></span><span class="lc" id="tlg3"></span><span class="lc" id="tlg4"></span><span class="lc" id="tlg5"></span><span class="lc" id="tlg6"></span><span class="lc" id="tlg7"></span><span class="lc" id="tlg8"></span>
           많음</div>
         <div class="heat-total" id="tagTotal"></div>
       </div>
@@ -273,6 +293,14 @@
       <div id="planDay"></div>
     </section>
 
+    <!-- 로드맵 -->
+    <section id="v-roadmap" class="view">
+      <div class="section-title">과목(태그) 선택</div>
+      <div class="book-chips" id="rmTags"></div>
+      <div id="rmProgress"></div>
+      <div id="rmList"></div>
+    </section>
+
     <!-- 기록 -->
     <section id="v-log" class="view">
       <div class="section-title">세션 기록</div>
@@ -290,9 +318,7 @@
 /* 라이트 테마 · 서버 없음 · IndexedDB · 오프라인
    분류(독서/독서외) · 회독 카운터(수동) · 태그별 연간 잔디 밀도 */
 
-const HEAT={ reading:['#ece7f8','#c9b8ee','#a389e0','#7b68c2'],
-             other:['#e2f0fa','#b3d9f2','#7ebde6','#4e9dd6'],
-             all:['#ece7f8','#c9b8ee','#a389e0','#7b68c2'] };
+const PALETTE=['#efeafa','#ddd2f4','#c9b8ee','#b19ee6','#9a83dd','#8168ce','#6a50b8','#232032'];
 const EMPTY='#e9e9ef';
 const YEAR=new Date().getFullYear();
 
@@ -329,8 +355,8 @@ const bookName=id=>{const b=bookOf(id);return b?b.name:"(삭제됨)";};
 const catColor=c=>c==='other'?'var(--other)':'var(--reading)';
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove("show"),1800);}
-function level(sec){const m=sec/60;if(m<1)return 0;if(m<30)return 1;if(m<60)return 2;if(m<120)return 3;return 4;}
-function heatColor(sec,filter){const l=level(sec);return l===0?EMPTY:HEAT[filter][l-1];}
+function level(sec){if(sec<=0)return 0;const h=sec/3600;if(h>=8)return 8;return Math.min(7,Math.ceil(h));}
+function heatColor(sec){const l=level(sec);return l===0?EMPTY:PALETTE[l-1];}
 function allTags(){const s=new Set();books.forEach(b=>(b.tags||[]).forEach(t=>s.add(t)));return[...s].sort();}
 
 /* 화면 켜짐 */
@@ -458,18 +484,27 @@ function renderHeat(el,filterFn,palette){el.innerHTML="";
   for(let i=0;i<start.getDay();i++){const c=document.createElement("div");c.className="hcell";el.appendChild(c);}
   let total=0;
   for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){const k=dateKey(d);const sec=map[k]||0;total+=sec;
-    const c=document.createElement("div");c.className="hcell";c.style.background=heatColor(sec,palette);c.title=k+" "+fmtDur(sec);el.appendChild(c);}
+    const c=document.createElement("div");c.className="hcell";c.style.background=heatColor(sec);c.title=k+" "+fmtDur(sec);el.appendChild(c);}
   return total;}
-function paintLegend(prefix,pal){for(let i=1;i<=4;i++)$(prefix+i).style.background=HEAT[pal][i-1];}
+function paintLegend(prefix){for(let i=1;i<=8;i++){const e=$(prefix+i);if(e)e.style.background=PALETTE[i-1];}}
 function renderMonthLabels(el){el.innerHTML="";
   const start=new Date(YEAR,0,1),startDow=start.getDay(),COL=14; // 셀11+간격3
-  for(let mo=0;mo<12;mo++){const first=new Date(YEAR,mo,1);
-    const doy=Math.round((first-start)/86400000),col=Math.floor((startDow+doy)/7);
-    const s=document.createElement("span");s.textContent=(mo+1)+"월";s.style.left=(col*COL)+"px";el.appendChild(s);}}
+  const end=new Date(YEAR,11,31);
+  const totalDays=Math.round((end-start)/86400000)+1;
+  const totalCols=Math.ceil((startDow+totalDays)/7);
+  let last=-1;
+  for(let col=0;col<totalCols;col++){
+    const di=col*7-startDow;                 // 그 열 최상단(일요일)의 날짜 index (0=1/1)
+    const d=di<0?start:new Date(YEAR,0,1+di); // 첫 열 상단 빈칸이면 1/1(1월)로 취급
+    if(d.getFullYear()!==YEAR)continue;
+    const mo=d.getMonth();
+    if(mo!==last){last=mo;
+      const s=document.createElement("span");s.textContent=(mo+1)+"월";s.style.left=(col*COL)+"px";el.appendChild(s);}
+  }}
 function renderStats(){
   const fn=s=>{if(heatFilter==='all')return true;const b=bookOf(s.bookId);return b&&(b.category||'reading')===heatFilter;};
   const total=renderHeat($("heatMain"),fn,heatFilter);renderMonthLabels($("heatMonMain"));
-  paintLegend('lg',heatFilter);
+  paintLegend('lg');
   $("heatTotal").innerHTML=`${YEAR}년 합계 <b>${fmtDur(total)}</b>`;
   // 교재별
   const bb=$("byBook");bb.innerHTML="";
@@ -504,7 +539,7 @@ function renderTagChips(){const c=$("tagChips");c.innerHTML="";const tags=allTag
 function renderTags(){renderTagChips();
   if(!selTag){$("tagTitle").textContent="태그를 선택하세요";$("heatTag").innerHTML="";$("tagTotal").textContent="";$("tagBooks").style.display="none";return;}
   const fn=s=>{const b=bookOf(s.bookId);return b&&(b.tags||[]).includes(selTag);};
-  const total=renderHeat($("heatTag"),fn,'all');paintLegend('tlg','all');renderMonthLabels($("heatMonTag"));
+  const total=renderHeat($("heatTag"),fn,'all');paintLegend('tlg');renderMonthLabels($("heatMonTag"));
   $("tagTitle").textContent="#"+selTag;
   $("tagTotal").innerHTML=`#${esc(selTag)} ${YEAR}년 합계 <b>${fmtDur(total)}</b>`;
   // 포함 교재별
@@ -673,11 +708,48 @@ $("planPrev").onclick=()=>{if(planMode==="month"){planYM.m--;if(planYM.m<0){plan
 $("planNext").onclick=()=>{if(planMode==="month"){planYM.m++;if(planYM.m>11){planYM.m=0;planYM.y++;}}else planDate.setDate(planDate.getDate()+1);renderPlan();};
 $("planToday").onclick=()=>{const n=new Date();if(planMode==="month"){planYM={y:n.getFullYear(),m:n.getMonth()};}else planDate=new Date();renderPlan();};
 
+/* ===== 로드맵(과목별 회독 체크리스트) — 교재 회독 카운터와 독립 ===== */
+let selRmTag=null;
+const rmT=b=>Math.max(1,b.rmTarget||1);
+const rmD=b=>Math.min(rmT(b),Math.max(0,b.rmDone||0));
+function renderRmTags(){const c=$("rmTags");c.innerHTML="";const tags=allTags();
+  if(!tags.length){c.innerHTML='<span class="muted small" style="padding:8px 0">교재에 태그를 달면 과목별 로드맵이 여기에 나옵니다.</span>';return;}
+  if(selRmTag&&!tags.includes(selRmTag))selRmTag=null;
+  tags.forEach(t=>{const el=document.createElement("button");el.className="chip"+(t===selRmTag?" sel reading":"");
+    el.textContent="#"+t;el.onclick=()=>{selRmTag=t;renderRoadmap();};c.appendChild(el);});}
+function renderRoadmap(){renderRmTags();
+  const prog=$("rmProgress"),list=$("rmList");
+  if(!selRmTag){prog.innerHTML="";list.innerHTML='<div class="empty">과목(태그)을 선택하면 교재별 회독 진도를 한눈에 봅니다.</div>';return;}
+  const bks=books.filter(b=>!b.archived&&(b.tags||[]).includes(selRmTag));
+  if(!bks.length){prog.innerHTML="";list.innerHTML='<div class="empty small">이 태그의 교재가 없습니다.</div>';return;}
+  const done=bks.reduce((a,b)=>a+rmD(b),0),tot=bks.reduce((a,b)=>a+rmT(b),0);
+  const pct=tot?Math.round(done/tot*100):0;
+  prog.innerHTML=`<div class="rm-prog"><div class="top"><div class="pct">${pct}%</div><div class="rem">${done}/${tot}회독 · 남은 ${tot-done}</div></div>
+    <div class="rm-bar"><div class="fill" style="width:${pct}%"></div></div></div>`;
+  list.innerHTML="";
+  bks.forEach(b=>{const d=rmD(b),t=rmT(b);
+    let slots="";for(let i=1;i<=t;i++)slots+=`<div class="slot ${i<=d?'on':''}" data-id="${b.id}" data-k="${i}">${i}</div>`;
+    const el=document.createElement("div");el.className="rm-item";
+    el.innerHTML=`<div class="head"><span class="cdot" style="background:${catColor(b.category)}"></span>
+      <span class="nm">${esc(b.name)}</span><span class="cnt">${d}/${t}</span></div>
+      <div class="rm-slots">${slots}
+        <span class="rm-target"><button data-dec="${b.id}">−</button><span class="tv">${t}</span><button data-inc="${b.id}">＋</button></span>
+      </div>`;
+    list.appendChild(el);});
+  list.querySelectorAll(".slot").forEach(s=>s.onclick=async()=>{
+    const b=bookOf(parseInt(s.dataset.id,10));if(!b)return;const k=parseInt(s.dataset.k,10);
+    b.rmDone=(k===rmD(b))?k-1:k;await put("books",b);await reload();renderRoadmap();});
+  list.querySelectorAll("[data-inc]").forEach(btn=>btn.onclick=async()=>{
+    const b=bookOf(parseInt(btn.dataset.inc,10));b.rmTarget=Math.min(20,rmT(b)+1);await put("books",b);await reload();renderRoadmap();});
+  list.querySelectorAll("[data-dec]").forEach(btn=>btn.onclick=async()=>{
+    const b=bookOf(parseInt(btn.dataset.dec,10));b.rmTarget=Math.max(1,rmT(b)-1);b.rmDone=Math.min(b.rmTarget,rmD(b));await put("books",b);await reload();renderRoadmap();});
+}
+
 /* 네비 */
 function switchView(v){document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active",t.dataset.view===v));
   document.querySelectorAll(".view").forEach(s=>s.classList.remove("active"));$("v-"+v).classList.add("active");
-  const sub={timer:'타이머',plan:'계획',books:'교재',stats:'통계',tags:'태그',log:'기록'}[v];$("hSub").textContent="· "+sub;
-  if(v==="stats")renderStats();if(v==="tags")renderTags();if(v==="log")renderLog();if(v==="books")renderBooks();if(v==="plan")renderPlan();if(v==="timer"){renderChips();renderSW();}}
+  const sub={timer:'타이머',plan:'계획',roadmap:'로드맵',books:'교재',stats:'통계',tags:'태그',log:'기록'}[v];$("hSub").textContent="· "+sub;
+  if(v==="stats")renderStats();if(v==="tags")renderTags();if(v==="log")renderLog();if(v==="books")renderBooks();if(v==="plan")renderPlan();if(v==="roadmap")renderRoadmap();if(v==="timer"){renderChips();renderSW();}}
 document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>switchView(t.dataset.view));
 $("heatSeg").querySelectorAll("button").forEach(b=>b.onclick=()=>{heatFilter=b.dataset.f;
   $("heatSeg").querySelectorAll("button").forEach(x=>x.classList.remove("on"));b.classList.add("on");renderStats();});
@@ -689,7 +761,7 @@ $("timerSearch").oninput=e=>{timerSearch=e.target.value;renderChips();};
 async function reload(){books=await allOf("books");sessions=await allOf("sessions");plans=await allOf("plans");
   renderChips();renderSW();refreshTotals();
   const cur=document.querySelector(".view.active").id.replace("v-","");
-  if(cur==="books")renderBooks();if(cur==="stats")renderStats();if(cur==="tags")renderTags();if(cur==="log")renderLog();if(cur==="plan")renderPlan();}
+  if(cur==="books")renderBooks();if(cur==="stats")renderStats();if(cur==="tags")renderTags();if(cur==="log")renderLog();if(cur==="plan")renderPlan();if(cur==="roadmap")renderRoadmap();}
 
 (async function init(){await openDB();
   const w=await getM("wakeOn");wakeOn=w?!!w.value:false;
