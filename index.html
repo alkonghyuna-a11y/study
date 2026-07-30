@@ -188,6 +188,12 @@
   .rm-move{display:flex;flex-direction:column;gap:2px;flex:none;margin-left:8px}
   .rm-move button{background:var(--soft);border:1px solid var(--line);color:var(--muted);width:30px;height:20px;border-radius:7px;font-size:11px;line-height:1;cursor:pointer;padding:0}
   .rm-move button:disabled{opacity:.35;cursor:default}
+  .rm-slots{align-items:flex-start}
+  .slotcol{display:flex;flex-direction:column;align-items:center;gap:5px}
+  .dt{font-size:11px;white-space:nowrap;cursor:pointer;color:var(--muted)}
+  .dt.done{color:#1f8f52;font-weight:700}
+  .dt.plan{color:#7157c9}
+  .dt.empty{color:#c4c4cc}
 </style>
 </head>
 <body>
@@ -731,7 +737,12 @@ function renderRoadmap(){renderRmTags();
     <div class="rm-bar"><div class="fill" style="width:${pct}%"></div></div></div>`;
   list.innerHTML="";
   bks.forEach((b,i)=>{const d=rmD(b),t=rmT(b);
-    let slots="";for(let k=1;k<=t;k++)slots+=`<div class="slot ${k<=d?'on':''}" data-id="${b.id}" data-k="${k}">${k}</div>`;
+    let slots="";for(let k=1;k<=t;k++){
+      const val=(b.rmDates||{})[k]||"";const isDone=k<=d;let dtxt,dcls;
+      if(val){const p=val.split('-');const md=(+p[1])+'/'+(+p[2]);if(isDone){dtxt=md;dcls='done';}else{dtxt='예정 '+md;dcls='plan';}}
+      else{dtxt='＋ 날짜';dcls='empty';}
+      slots+=`<div class="slotcol"><div class="slot ${isDone?'on':''}" data-id="${b.id}" data-k="${k}">${k}</div>
+        <div class="dt ${dcls}" data-date="${b.id}" data-dk="${k}">${dtxt}</div></div>`;}
     const el=document.createElement("div");el.className="rm-item";
     el.innerHTML=`<div class="head"><span class="cdot" style="background:${catColor(b.category)}"></span>
       <span class="nm">${esc(b.name)}</span><span class="cnt">${d}/${t}</span>
@@ -752,6 +763,14 @@ function renderRoadmap(){renderRmTags();
     const b=bookOf(parseInt(btn.dataset.inc,10));b.rmTarget=Math.min(20,rmT(b)+1);await put("books",b);await reload();renderRoadmap();});
   list.querySelectorAll("[data-dec]").forEach(btn=>btn.onclick=async()=>{
     const b=bookOf(parseInt(btn.dataset.dec,10));b.rmTarget=Math.max(1,rmT(b)-1);b.rmDone=Math.min(b.rmTarget,rmD(b));await put("books",b);await reload();renderRoadmap();});
+  list.querySelectorAll(".dt[data-date]").forEach(el=>el.onclick=()=>{
+    const b=bookOf(parseInt(el.dataset.date,10));const k=parseInt(el.dataset.dk,10);const cur=(b.rmDates||{})[k]||"";
+    openSheet(`<h2>${k}회독 날짜</h2><div class="small muted" style="margin:0 2px 10px">완료했으면 완료일, 아직이면 예정일로 표시됩니다.</div>
+      <input type="date" id="rdDate" value="${cur}">
+      <button class="btn btn-grad btn-block" id="rdSave" style="margin-top:14px">저장</button>
+      <button class="btn btn-soft btn-block" id="rdClear" style="margin-top:8px">비우기</button>`);
+    $("rdSave").onclick=async()=>{const v=$("rdDate").value;b.rmDates=Object.assign({},b.rmDates||{});if(v)b.rmDates[k]=v;else delete b.rmDates[k];await put("books",b);closeSheet();await reload();renderRoadmap();};
+    $("rdClear").onclick=async()=>{b.rmDates=Object.assign({},b.rmDates||{});delete b.rmDates[k];await put("books",b);closeSheet();await reload();renderRoadmap();};});
 }
 
 /* 네비 */
