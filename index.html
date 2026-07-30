@@ -185,6 +185,9 @@
   .rm-target button{background:none;border:none;color:var(--text);width:30px;height:30px;font-size:16px;cursor:pointer}
   .rm-target .tv{min-width:24px;text-align:center;font-size:13px;font-weight:700}
   .rm-hint{font-size:12px;color:var(--muted);margin:2px 4px 0}
+  .rm-move{display:flex;flex-direction:column;gap:2px;flex:none;margin-left:8px}
+  .rm-move button{background:var(--soft);border:1px solid var(--line);color:var(--muted);width:30px;height:20px;border-radius:7px;font-size:11px;line-height:1;cursor:pointer;padding:0}
+  .rm-move button:disabled{opacity:.35;cursor:default}
 </style>
 </head>
 <body>
@@ -720,22 +723,28 @@ function renderRmTags(){const c=$("rmTags");c.innerHTML="";const tags=allTags();
 function renderRoadmap(){renderRmTags();
   const prog=$("rmProgress"),list=$("rmList");
   if(!selRmTag){prog.innerHTML="";list.innerHTML='<div class="empty">과목(태그)을 선택하면 교재별 회독 진도를 한눈에 봅니다.</div>';return;}
-  const bks=books.filter(b=>!b.archived&&(b.tags||[]).includes(selRmTag));
+  const bks=books.filter(b=>!b.archived&&(b.tags||[]).includes(selRmTag)).sort((a,b)=>((a.order??a.id)-(b.order??b.id)));
   if(!bks.length){prog.innerHTML="";list.innerHTML='<div class="empty small">이 태그의 교재가 없습니다.</div>';return;}
   const done=bks.reduce((a,b)=>a+rmD(b),0),tot=bks.reduce((a,b)=>a+rmT(b),0);
   const pct=tot?Math.round(done/tot*100):0;
   prog.innerHTML=`<div class="rm-prog"><div class="top"><div class="pct">${pct}%</div><div class="rem">${done}/${tot}회독 · 남은 ${tot-done}</div></div>
     <div class="rm-bar"><div class="fill" style="width:${pct}%"></div></div></div>`;
   list.innerHTML="";
-  bks.forEach(b=>{const d=rmD(b),t=rmT(b);
-    let slots="";for(let i=1;i<=t;i++)slots+=`<div class="slot ${i<=d?'on':''}" data-id="${b.id}" data-k="${i}">${i}</div>`;
+  bks.forEach((b,i)=>{const d=rmD(b),t=rmT(b);
+    let slots="";for(let k=1;k<=t;k++)slots+=`<div class="slot ${k<=d?'on':''}" data-id="${b.id}" data-k="${k}">${k}</div>`;
     const el=document.createElement("div");el.className="rm-item";
     el.innerHTML=`<div class="head"><span class="cdot" style="background:${catColor(b.category)}"></span>
-      <span class="nm">${esc(b.name)}</span><span class="cnt">${d}/${t}</span></div>
+      <span class="nm">${esc(b.name)}</span><span class="cnt">${d}/${t}</span>
+      <span class="rm-move"><button data-up="${b.id}" ${i===0?'disabled':''}>▲</button><button data-down="${b.id}" ${i===bks.length-1?'disabled':''}>▼</button></span></div>
       <div class="rm-slots">${slots}
         <span class="rm-target"><button data-dec="${b.id}">−</button><span class="tv">${t}</span><button data-inc="${b.id}">＋</button></span>
       </div>`;
     list.appendChild(el);});
+  async function moveRm(id,dir){const idx=bks.findIndex(x=>x.id===id);const j=idx+dir;if(j<0||j>=bks.length)return;
+    const a=bks[idx],b=bks[j];const ao=a.order??a.id,bo=b.order??b.id;a.order=bo;b.order=ao;
+    await put("books",a);await put("books",b);await reload();renderRoadmap();}
+  list.querySelectorAll("[data-up]").forEach(btn=>btn.onclick=()=>moveRm(parseInt(btn.dataset.up,10),-1));
+  list.querySelectorAll("[data-down]").forEach(btn=>btn.onclick=()=>moveRm(parseInt(btn.dataset.down,10),1));
   list.querySelectorAll(".slot").forEach(s=>s.onclick=async()=>{
     const b=bookOf(parseInt(s.dataset.id,10));if(!b)return;const k=parseInt(s.dataset.k,10);
     b.rmDone=(k===rmD(b))?k-1:k;await put("books",b);await reload();renderRoadmap();});
