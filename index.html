@@ -218,6 +218,7 @@
       <input type="text" id="timerSearch" placeholder="교재 이름 검색" style="margin-bottom:8px">
       <div class="book-chips" id="timerTags"></div>
       <div class="book-chips" id="bookChips"></div>
+      <div class="book-chips" id="roundChips"></div>
       <div class="card">
         <div class="stopwatch">
           <div class="sw-book" id="swBook">교재를 선택하세요</div>
@@ -381,20 +382,32 @@ async function persistActive(){if(active)await put("meta",{key:"active",value:ac
 function checkpoint(){if(active&&active.running){active.accMs+=Date.now()-active.lastResumeTs;active.lastResumeTs=Date.now();persistActive();}}
 async function swStart(){
   if(!active){if(!selBookId){toast("먼저 교재를 선택하세요");return;}
-    active={bookId:selBookId,accMs:0,running:true,lastResumeTs:Date.now(),startedAt:new Date().toISOString()};}
+    active={bookId:selBookId,round:selRound,accMs:0,running:true,lastResumeTs:Date.now(),startedAt:new Date().toISOString()};}
   else{active.running=true;active.lastResumeTs=Date.now();}
   await persistActive();reqWake();loops(true);renderSW();}
 async function swPause(){checkpoint();active.running=false;await persistActive();loops(false);relWake();renderSW();}
 async function swStop(){checkpoint();const sec=Math.round(active.accMs/1000);
-  if(sec>=1){const b=bookOf(active.bookId);
-    await put("sessions",{bookId:active.bookId,seconds:sec,startedAt:active.startedAt,endedAt:new Date().toISOString(),round:b?b.round:1,dateKey:dateKey()});}
+  if(sec>=1){
+    await put("sessions",{bookId:active.bookId,seconds:sec,startedAt:active.startedAt,endedAt:new Date().toISOString(),round:active.round||1,dateKey:dateKey()});}
   active=null;await persistActive();loops(false);relWake();await reload();renderSW();
   toast(sec>=1?"저장됨 · "+fmtDur(sec):"1초 미만 저장 안 함");}
 function loops(on){clearInterval(swInt);clearInterval(cpInt);swInt=cpInt=null;
   if(on){swInt=setInterval(()=>$("swTime").textContent=fmtClock(elapsedMs()),1000);cpInt=setInterval(checkpoint,10000);}}
 
 /* 타이머 렌더 */
-let timerTag=null, timerSearch="", showArchived=false;
+let timerTag=null, timerSearch="", showArchived=false, selRound=1;
+const nextUndone=b=>Math.min(Math.max(1,b.rmTarget||1),(Math.min(Math.max(1,b.rmTarget||1),Math.max(0,b.rmDone||0)))+1);
+function renderRoundChips(){const c=$("roundChips");c.innerHTML="";
+  const b=selBookId?bookOf(selBookId):null;
+  if(!b){c.style.display="none";return;}
+  const t=Math.max(1,b.rmTarget||1);
+  if(t<=1){c.style.display="none";return;}   // 회독 개념 없는 교재
+  c.style.display="flex";
+  const lbl=document.createElement("span");lbl.className="muted small";lbl.style.cssText="align-self:center;margin-right:4px";lbl.textContent="회독";c.appendChild(lbl);
+  for(let k=1;k<=t;k++){const el=document.createElement("button");
+    el.className="chip"+(k===selRound?" sel reading":"");el.textContent=k+"회독"+(k<=(b.rmDone||0)?" ✓":"");
+    el.onclick=()=>{if(active){toast("진행 중에는 회독을 바꿀 수 없습니다");return;}selRound=k;renderRoundChips();renderSW();};
+    c.appendChild(el);}}
 function renderTimerTags(){const c=$("timerTags");const tags=allTags();
   if(!tags.length){c.style.display="none";c.innerHTML="";return;}
   c.style.display="flex";c.innerHTML="";
@@ -408,15 +421,17 @@ function renderChips(){renderTimerTags();const c=$("bookChips");c.innerHTML="";
   const act=books.filter(b=>!b.archived
     && (timerTag?(b.tags||[]).includes(timerTag):true)
     && (q?b.name.toLowerCase().includes(q):true));
-  if(!act.length){c.innerHTML='<span class="muted small" style="padding:8px 0">'+(books.filter(b=>!b.archived).length?'조건에 맞는 교재가 없습니다.':'교재 탭에서 교재를 먼저 추가하세요.')+'</span>';return;}
+  if(!act.length){c.innerHTML='<span class="muted small" style="padding:8px 0">'+(books.filter(b=>!b.archived).length?'조건에 맞는 교재가 없습니다.':'교재 탭에서 교재를 먼저 추가하세요.')+'</span>';renderRoundChips();return;}
   act.forEach(b=>{const el=document.createElement("button");
     el.className="chip"+(b.id===selBookId?" sel "+(b.category||'reading'):"");
     el.innerHTML=`<span class="cdot" style="background:${catColor(b.category)}"></span>${esc(b.name)}`;
-    el.onclick=()=>{if(active){toast("진행 중에는 교재를 바꿀 수 없습니다");return;}selBookId=b.id;renderChips();renderSW();};
-    c.appendChild(el);});}
+    el.onclick=()=>{if(active){toast("진행 중에는 교재를 바꿀 수 없습니다");return;}selBookId=b.id;selRound=nextUndone(b);renderChips();renderRoundChips();renderSW();};
+    c.appendChild(el);});
+  renderRoundChips();}
 function renderSW(){const running=active&&active.running,paused=active&&!active.running;
-  const bId=active?active.bookId:selBookId;
-  $("swBook").textContent=bId?bookName(bId):"교재를 선택하세요";
+  const bId=active?active.bookId:selBookId;const rd=active?active.round:selRound;
+  const b=bId?bookOf(bId):null;const showR=b&&Math.max(1,b.rmTarget||1)>1;
+  $("swBook").textContent=bId?(bookName(bId)+(showR?" · "+rd+"회독":"")):"교재를 선택하세요";
   $("swTime").textContent=fmtClock(elapsedMs());
   $("swDot").className="sw-dot"+(running?" run":"");
   $("swStateT").textContent=running?"측정 중":paused?"일시정지":"대기";
@@ -442,12 +457,10 @@ function renderBooks(){const w=$("bookList");w.innerHTML="";
     const tagsHtml=(b.tags||[]).map(t=>`<span class="tagpill">#${esc(t)}</span>`).join("");
     el.innerHTML=`<span class="cdot" style="background:${catColor(b.category)}"></span>
       <div class="info"><div class="nm">${esc(b.name)}${b.archived?' <span class="muted small">(보관)</span>':''}</div>
-      <div class="sub">${b.category==='other'?'독서외':'독서'} · 누적 ${fmtDur(sec)} · 현재 ${b.round}회독</div>
+      <div class="sub">${b.category==='other'?'독서외':'독서'} · 누적 ${fmtDur(sec)}</div>
       <div class="tags">${tagsHtml}</div></div>
-      <div class="acts"><button class="mini" data-a="round">다음 회독</button>
-      <button class="mini" data-a="edit">편집</button><button class="mini warn" data-a="del">삭제</button></div>`;
-    el.querySelector('[data-a=round]').onclick=async()=>{b.round=(b.round||0)+1;await put("books",b);await reload();toast(b.name+" → "+b.round+"회독");};
-    el.querySelector('.nm').onclick=(e)=>{e.currentTarget.classList.toggle('expanded');};
+      <div class="acts"><button class="mini" data-a="edit">편집</button><button class="mini warn" data-a="del">삭제</button></div>`;
+    const nm=el.querySelector('.nm');nm.style.cursor='pointer';nm.onclick=(e)=>e.currentTarget.classList.toggle('expanded');
     el.querySelector('[data-a=edit]').onclick=()=>editBookFlow(b);
     el.querySelector('[data-a=del]').onclick=async()=>{const cnt=sessions.filter(s=>s.bookId===b.id).length;
       if(confirm(`'${b.name}'을(를) 삭제하면 관련 시간 기록 ${cnt}건도 함께 사라져 통계·연간 잔디에서 빠집니다.\n\n목록만 정리하려면 삭제 대신 편집 → 보관을 쓰세요. 보관하면 기록은 통계에 그대로 남습니다.\n\n그래도 삭제할까요?`)){
@@ -463,9 +476,7 @@ function bookForm(b){return `
     <button data-c="other" class="${b&&b.category==='other'?'on other':''}">독서외</button>
   </div>
   <label class="f">태그 (공백 구분, # 생략 가능)</label>
-  <input type="text" id="fTags" value="${b?(b.tags||[]).join(' '):''}" placeholder="예: 투운사 자격증">
-  <label class="f">현재 회독 (신규 등록은 0회독, 실수로 올렸다면 여기서 되돌리세요)</label>
-  <input type="number" id="fRound" min="0" max="99" value="${b?(b.round||0):0}">`;}
+  <input type="text" id="fTags" value="${b?(b.tags||[]).join(' '):''}" placeholder="예: 투운사 자격증">`;}
 function bindCatToggle(){let cat=$("fCat").querySelector('.on').dataset.c;
   $("fCat").querySelectorAll('button').forEach(btn=>btn.onclick=()=>{cat=btn.dataset.c;
     $("fCat").querySelectorAll('button').forEach(x=>x.className="");btn.className="on "+cat;});
@@ -474,8 +485,7 @@ function addBookFlow(){openSheet(`<h2>교재 추가</h2>${bookForm(null)}
   <button class="btn btn-grad btn-block" id="fSave" style="margin-top:16px">추가</button>`);
   const getCat=bindCatToggle();
   $("fSave").onclick=async()=>{const name=$("fName").value.trim();if(!name){toast("이름을 입력하세요");return;}
-    const rd=Math.min(99,Math.max(0,parseInt($("fRound").value,10)||0));
-    const id=await put("books",{name,category:getCat(),tags:parseTags($("fTags").value),round:rd,createdAt:new Date().toISOString(),archived:false});
+    const id=await put("books",{name,category:getCat(),tags:parseTags($("fTags").value),createdAt:new Date().toISOString(),archived:false});
     closeSheet();await reload();if(!selBookId)selBookId=id;renderChips();renderSW();toast("추가됨");};}
 function editBookFlow(b){openSheet(`<h2>교재 편집</h2>${bookForm(b)}
   <div class="set-item" style="margin-top:12px"><div>보관 (목록에서 숨김)</div>
@@ -483,8 +493,7 @@ function editBookFlow(b){openSheet(`<h2>교재 편집</h2>${bookForm(b)}
   <button class="btn btn-grad btn-block" id="fSave" style="margin-top:8px">저장</button>`);
   const getCat=bindCatToggle();
   $("fSave").onclick=async()=>{b.name=$("fName").value.trim()||b.name;b.category=getCat();b.tags=parseTags($("fTags").value);b.archived=$("fArch").checked;
-    b.round=Math.min(99,Math.max(0,isNaN(parseInt($("fRound").value,10))?(b.round||0):parseInt($("fRound").value,10)));
-    await put("books",b);closeSheet();await reload();toast("저장됨 · 현재 "+b.round+"회독");};}
+    await put("books",b);closeSheet();await reload();toast("저장됨");};}
 
 /* 잔디 렌더 */
 function renderHeat(el,filterFn,palette){el.innerHTML="";
@@ -576,15 +585,19 @@ function renderLog(){const w=$("logList");w.innerHTML="";
       w.appendChild(el);});});}
 function addSessionFlow(){if(!books.length){toast("교재를 먼저 추가하세요");switchView("books");return;}
   openSheet(`<h2>수동 시간 추가</h2>
-    <label class="f">교재</label><select id="mBook">${books.map(b=>`<option value="${b.id}">${esc(b.name)} (${b.round}회독)</option>`).join("")}</select>
+    <label class="f">교재</label><select id="mBook">${books.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join("")}</select>
+    <label class="f">회독</label><input type="number" id="mRound" min="1" max="99" value="1">
     <label class="f">날짜</label><input type="date" id="mDate" value="${dateKey()}">
     <div style="display:flex;gap:10px"><div style="flex:1"><label class="f">시간(시)</label><input type="number" id="mH" min="0" value="0"></div>
     <div style="flex:1"><label class="f">분</label><input type="number" id="mM" min="0" max="59" value="30"></div></div>
     <button class="btn btn-grad btn-block" id="mSave" style="margin-top:16px">추가</button>`);
-  $("mSave").onclick=async()=>{const bid=parseInt($("mBook").value,10);const b=bookOf(bid);
+  const setDefRound=()=>{const b=bookOf(parseInt($("mBook").value,10));if(b)$("mRound").value=nextUndone(b);};setDefRound();
+  $("mBook").onchange=setDefRound;
+  $("mSave").onclick=async()=>{const bid=parseInt($("mBook").value,10);
+    const rd=Math.max(1,parseInt($("mRound").value,10)||1);
     const sec=(parseInt($("mH").value||0,10)*3600)+(parseInt($("mM").value||0,10)*60);
     if(sec<=0){toast("시간을 입력하세요");return;}const dk=$("mDate").value||dateKey();
-    await put("sessions",{bookId:bid,seconds:sec,startedAt:dk+"T00:00:00",endedAt:dk+"T00:00:00",round:b?b.round:1,dateKey:dk});
+    await put("sessions",{bookId:bid,seconds:sec,startedAt:dk+"T00:00:00",endedAt:dk+"T00:00:00",round:rd,dateKey:dk});
     closeSheet();await reload();toast("추가됨 · "+fmtDur(sec));};}
 
 /* 설정/시트 */
@@ -614,7 +627,7 @@ function exportJSON(){download("study-"+dateKey()+".json",JSON.stringify({v:2,bo
 function exportMD(){const tot=sessions.reduce((a,s)=>a+s.seconds,0);
   let md=`# 공부시간 기록 (${dateKey()})\n\n총 순공: **${fmtDur(tot)}**\n\n## 교재별\n\n`;
   books.forEach(b=>{const sec=sessions.filter(s=>s.bookId===b.id).reduce((a,s)=>a+s.seconds,0);
-    md+=`- ${b.name} (${b.category==='other'?'독서외':'독서'}${(b.tags||[]).length?' · '+b.tags.map(t=>'#'+t).join(' '):''}) — ${fmtDur(sec)} · 현재 ${b.round}회독\n`;});
+    md+=`- ${b.name} (${b.category==='other'?'독서외':'독서'}${(b.tags||[]).length?' · '+b.tags.map(t=>'#'+t).join(' '):''}) — ${fmtDur(sec)}\n`;});
   md+=`\n## 세션 로그\n\n| 날짜 | 교재 | 회독 | 시간 |\n|---|---|---|---|\n`;
   sessions.slice().sort((a,b)=>a.dateKey.localeCompare(b.dateKey)).forEach(s=>{md+=`| ${s.dateKey} | ${bookName(s.bookId)} | ${s.round||1} | ${fmtDur(s.seconds)} |\n`;});
   download("study-"+dateKey()+".md",md,"text/markdown");}
@@ -631,11 +644,12 @@ function importJSON(e){const f=e.target.files[0];if(!f)return;const r=new FileRe
 /* ===== 계획(월/일) — 시간·회독과 완전 분리 ===== */
 let plans=[], planMode="month", planYM={y:new Date().getFullYear(),m:new Date().getMonth()}, planDate=new Date();
 const DOW=["일","월","화","수","목","금","토"];
-const unitLabel=u=>({round:"회독",page:"페이지",lecture:"강",etc:""})[u]||"";
-function goalText(pl){const l=unitLabel(pl.unit);return (pl.value||"")+(l?l:"");}
-function planStatus(pl){if(pl.done)return "done";const t=dateKey();if(pl.date<t)return "past";if(pl.date===t)return "today";return "future";}
-const plansOn=k=>plans.filter(p=>p.date===k).sort((a,b)=>(a.order||0)-(b.order||0));
-
+/* 로드맵 회독 날짜에서 자동 파생 */
+function planItemsOn(k){const items=[];
+  books.forEach(b=>{const dates=b.rmDates||{};Object.keys(dates).forEach(kk=>{if(dates[kk]===k){const rd=+kk;
+    items.push({title:b.name,round:rd,done:rd<=rmD(b),cat:b.category});}});});
+  return items.sort((a,b)=>a.title.localeCompare(b.title)||a.round-b.round);}
+function planStatusOf(item,dateK){if(item.done)return "done";const t=dateKey();if(dateK<t)return "past";if(dateK===t)return "today";return "future";}
 function renderPlan(){
   document.querySelectorAll("#planSeg button").forEach(b=>b.classList.toggle("on",b.dataset.m===planMode));
   if(planMode==="month"){$("planMonth").style.display="block";$("planDay").style.display="none";renderPlanMonth();}
@@ -649,9 +663,9 @@ function renderPlanMonth(){
   const today=dateKey();
   for(let d=1;d<=last.getDate();d++){
     const dt=new Date(planYM.y,planYM.m,d),k=dateKey(dt);
-    const items=plansOn(k);
+    const items=planItemsOn(k);
     let inner=`<div class="dnum">${d}</div>`;
-    items.slice(0,3).forEach(pl=>{inner+=`<div class="pl pl-${planStatus(pl)}">${esc(pl.title)}</div>`;});
+    items.slice(0,3).forEach(it=>{inner+=`<div class="pl pl-${planStatusOf(it,k)}">${esc(it.title)} ${it.round}회독</div>`;});
     if(items.length>3)inner+=`<div class="more">+${items.length-3}</div>`;
     html+=`<div class="cell${k===today?' today':''}" data-k="${k}">${inner}</div>`;
   }
@@ -663,51 +677,15 @@ function renderPlanMonth(){
 function renderPlanDay(){
   const k=dateKey(planDate);
   $("planTitle").textContent=k+" ("+DOW[planDate.getDay()]+")";
-  const items=plansOn(k);
+  const items=planItemsOn(k);
   let html="";
-  if(!items.length)html+='<div class="empty">이 날의 목표가 없습니다.<br>아래 버튼으로 목표를 추가하세요.</div>';
-  items.forEach(pl=>{
-    html+=`<div class="goal"><div class="chk ${pl.done?'on':''}" data-id="${pl.id}">✓</div>
-      <div class="gt"><div class="gnm ${pl.done?'done':''}">${esc(pl.title)}</div><div class="gu">${esc(goalText(pl))}${pl.done?' · 완료':''}</div></div>
-      <div class="gact"><button class="mini" data-edit="${pl.id}">수정</button><button class="mini warn" data-del="${pl.id}">삭제</button></div></div>`;
-  });
-  html+='<button class="btn btn-grad btn-block" id="addGoal" style="margin-top:6px">＋ 목표 추가</button>';
+  if(!items.length)html+='<div class="empty">이 날 계획이 없습니다.<br>로드맵에서 회독 날짜를 넣으면 자동으로 표시됩니다.</div>';
+  items.forEach(it=>{const st=planStatusOf(it,k);
+    html+=`<div class="goal"><span class="cdot" style="background:${catColor(it.cat)};width:11px;height:11px;border-radius:50%;flex:none"></span>
+      <div class="gt"><div class="gnm ${it.done?'done':''}">${esc(it.title)}</div>
+      <div class="gu pl-${st}">${it.round}회독 · ${it.done?'완료':(st==='past'?'미완(지남)':st==='today'?'오늘 예정':'예정')}</div></div></div>`;});
+  html+='<div class="rm-hint" style="text-align:center;margin-top:10px">완료 체크와 날짜 변경은 로드맵 탭에서 합니다.</div>';
   $("planDay").innerHTML=html;
-  $("planDay").querySelectorAll(".chk").forEach(c=>c.onclick=async()=>{
-    const pl=plans.find(p=>p.id===parseInt(c.dataset.id,10));if(!pl)return;pl.done=!pl.done;pl.doneAt=pl.done?new Date().toISOString():null;await put("plans",pl);await reloadPlans();renderPlan();});
-  $("planDay").querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>goalFlow(plans.find(p=>p.id===parseInt(b.dataset.edit,10))));
-  $("planDay").querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{if(confirm("이 목표를 삭제할까요?")){await del("plans",parseInt(b.dataset.del,10));await reloadPlans();renderPlan();}});
-  $("addGoal").onclick=()=>goalFlow(null);
-}
-function goalForm(pl){const u=pl?pl.unit:"round";
-  return `<label class="f">내용 (교재·목표 이름)</label><input type="text" id="gTitle" value="${pl?esc(pl.title):''}" placeholder="입력하거나 등록 교재에서 선택" autocomplete="off">
-  <div class="goal-sug" id="gSug"></div>
-  <label class="f">단위</label>
-  <div class="unit-toggle" id="gUnit">
-    ${["round","page","lecture","etc"].map(x=>`<button data-u="${x}" class="${x===u?'on':''}">${x==='round'?'회독':x==='page'?'페이지':x==='lecture'?'강':'기타'}</button>`).join("")}
-  </div>
-  <label class="f">값</label><input type="text" id="gVal" value="${pl?esc(pl.value||''):''}" placeholder="예: 1 · 13~50 · 4~7 · OX퀴즈 1세트">`;}
-function goalFlow(pl){
-  openSheet(`<h2>${pl?'목표 수정':'목표 추가'} · ${dateKey(planDate)}</h2>${goalForm(pl)}
-    <button class="btn btn-grad btn-block" id="gSave" style="margin-top:16px">${pl?'저장':'추가'}</button>`);
-  let unit=pl?pl.unit:"round";
-  const gt=$("gTitle"),gs=$("gSug");
-  function renderSug(){const q=gt.value.trim().toLowerCase();
-    if(!q){gs.style.display="none";gs.innerHTML="";return;}
-    const m=books.filter(b=>b.name.toLowerCase().includes(q)).slice(0,6);
-    if(!m.length||(m.length===1&&m[0].name===gt.value.trim())){gs.style.display="none";gs.innerHTML="";return;}
-    gs.style.display="flex";gs.innerHTML="";
-    m.forEach(b=>{const btn=document.createElement("button");btn.type="button";btn.className="sug-item";
-      btn.innerHTML=`${esc(b.name)}<span class="stag">${b.category==='other'?'독서외':'독서'}${b.archived?' · 보관':''}</span>`;
-      btn.onclick=()=>{gt.value=b.name;gs.style.display="none";gs.innerHTML="";};gs.appendChild(btn);});}
-  gt.oninput=renderSug;
-  $("gUnit").querySelectorAll("button").forEach(btn=>btn.onclick=()=>{unit=btn.dataset.u;
-    $("gUnit").querySelectorAll("button").forEach(x=>x.classList.remove("on"));btn.classList.add("on");});
-  $("gSave").onclick=async()=>{const title=$("gTitle").value.trim();if(!title){toast("내용을 입력하세요");return;}
-    const value=$("gVal").value.trim();
-    if(pl){pl.title=title;pl.unit=unit;pl.value=value;await put("plans",pl);}
-    else await put("plans",{date:dateKey(planDate),title,unit,value,done:false,order:Date.now(),createdAt:new Date().toISOString()});
-    closeSheet();await reloadPlans();renderPlan();toast(pl?"저장됨":"추가됨");};
 }
 async function reloadPlans(){plans=await allOf("plans");}
 
@@ -793,7 +771,7 @@ async function reload(){books=await allOf("books");sessions=await allOf("session
 
 (async function init(){await openDB();
   const w=await getM("wakeOn");wakeOn=w?!!w.value:false;
-  const a=await getM("active");if(a&&a.value){active=a.value;active.running=false;active.lastResumeTs=null;selBookId=active.bookId;await persistActive();}
+  const a=await getM("active");if(a&&a.value){active=a.value;active.running=false;active.lastResumeTs=null;selBookId=active.bookId;selRound=active.round||1;await persistActive();}
   await reload();renderSW();
   if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
 })();

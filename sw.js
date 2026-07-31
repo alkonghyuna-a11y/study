@@ -1,6 +1,6 @@
 /* v5: HTML은 네트워크 우선(항상 최신), 정적 파일은 캐시 우선.
    → 앞으로 파일을 올리면 새로고침 한 번에 최신 화면이 반영됩니다. 오프라인이면 캐시로 동작. */
-const CACHE="study-v14";
+const CACHE="study-v15";
 const ASSETS=["./","./index.html","./manifest.webmanifest","./icon-192.png","./icon-512.png","./icon-512-maskable.png","./apple-touch-icon.png"];
 self.addEventListener("install",e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)));self.skipWaiting();});
 self.addEventListener("activate",e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim();});
