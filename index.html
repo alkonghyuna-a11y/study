@@ -646,8 +646,9 @@ let plans=[], planMode="month", planYM={y:new Date().getFullYear(),m:new Date().
 const DOW=["일","월","화","수","목","금","토"];
 /* 로드맵 회독 날짜에서 자동 파생 */
 function planItemsOn(k){const items=[];
-  books.forEach(b=>{const dates=b.rmDates||{};Object.keys(dates).forEach(kk=>{if(dates[kk]===k){const rd=+kk;
-    items.push({title:b.name,round:rd,done:rd<=rmD(b),cat:b.category});}});});
+  books.forEach(b=>{const dates=b.rmDates||{};Object.keys(dates).forEach(kk=>{const d=normD(dates[kk]);if(!d.s)return;
+    const inRange=d.e?(d.s<=k&&k<=d.e):(d.s===k);
+    if(inRange){const rd=+kk;items.push({title:b.name,round:rd,done:rd<=rmD(b),cat:b.category});}});});
   return items.sort((a,b)=>a.title.localeCompare(b.title)||a.round-b.round);}
 function planStatusOf(item,dateK){if(item.done)return "done";const t=dateKey();if(dateK<t)return "past";if(dateK===t)return "today";return "future";}
 function renderPlan(){
@@ -699,6 +700,8 @@ $("planToday").onclick=()=>{const n=new Date();if(planMode==="month"){planYM={y:
 let selRmTag=null;
 const rmT=b=>Math.max(1,b.rmTarget||1);
 const rmD=b=>Math.min(rmT(b),Math.max(0,b.rmDone||0));
+const normD=v=>!v?{s:"",e:""}:(typeof v==="string"?{s:v,e:""}:{s:v.s||"",e:v.e||""}); // 기존 문자열 날짜 호환
+const mdShort=s=>{const p=s.split('-');return (+p[1])+'/'+(+p[2]);};
 function renderRmTags(){const c=$("rmTags");c.innerHTML="";const tags=allTags();
   if(!tags.length){c.innerHTML='<span class="muted small" style="padding:8px 0">교재에 태그를 달면 과목별 로드맵이 여기에 나옵니다.</span>';return;}
   if(selRmTag&&!tags.includes(selRmTag))selRmTag=null;
@@ -716,8 +719,9 @@ function renderRoadmap(){renderRmTags();
   list.innerHTML="";
   bks.forEach((b,i)=>{const d=rmD(b),t=rmT(b);
     let slots="";for(let k=1;k<=t;k++){
-      const val=(b.rmDates||{})[k]||"";const isDone=k<=d;let dtxt,dcls;
-      if(val){const p=val.split('-');const md=(+p[1])+'/'+(+p[2]);if(isDone){dtxt=md;dcls='done';}else{dtxt='예정 '+md;dcls='plan';}}
+      const dd=normD((b.rmDates||{})[k]);const isDone=k<=d;let dtxt,dcls;
+      if(dd.s){const range=dd.e&&dd.e!==dd.s?mdShort(dd.s)+"~"+mdShort(dd.e):mdShort(dd.s);
+        if(isDone){dtxt=range;dcls='done';}else{dtxt='예정 '+range;dcls='plan';}}
       else{dtxt='＋ 날짜';dcls='empty';}
       slots+=`<div class="slotcol"><div class="slot ${isDone?'on':''}" data-id="${b.id}" data-k="${k}">${k}</div>
         <div class="dt ${dcls}" data-date="${b.id}" data-dk="${k}">${dtxt}</div></div>`;}
@@ -742,12 +746,15 @@ function renderRoadmap(){renderRmTags();
   list.querySelectorAll("[data-dec]").forEach(btn=>btn.onclick=async()=>{
     const b=bookOf(parseInt(btn.dataset.dec,10));b.rmTarget=Math.max(1,rmT(b)-1);b.rmDone=Math.min(b.rmTarget,rmD(b));await put("books",b);await reload();renderRoadmap();});
   list.querySelectorAll(".dt[data-date]").forEach(el=>el.onclick=()=>{
-    const b=bookOf(parseInt(el.dataset.date,10));const k=parseInt(el.dataset.dk,10);const cur=(b.rmDates||{})[k]||"";
-    openSheet(`<h2>${k}회독 날짜</h2><div class="small muted" style="margin:0 2px 10px">완료했으면 완료일, 아직이면 예정일로 표시됩니다.</div>
-      <input type="date" id="rdDate" value="${cur}">
+    const b=bookOf(parseInt(el.dataset.date,10));const k=parseInt(el.dataset.dk,10);const cur=normD((b.rmDates||{})[k]);
+    openSheet(`<h2>${k}회독 기간</h2><div class="small muted" style="margin:0 2px 10px">며칠에 걸치면 종료일까지, 하루면 종료일을 비워 두세요.</div>
+      <label class="f">시작일</label><input type="date" id="rdS" value="${cur.s}">
+      <label class="f">종료일 (하루면 비움)</label><input type="date" id="rdE" value="${cur.e}">
       <button class="btn btn-grad btn-block" id="rdSave" style="margin-top:14px">저장</button>
       <button class="btn btn-soft btn-block" id="rdClear" style="margin-top:8px">비우기</button>`);
-    $("rdSave").onclick=async()=>{const v=$("rdDate").value;b.rmDates=Object.assign({},b.rmDates||{});if(v)b.rmDates[k]=v;else delete b.rmDates[k];await put("books",b);closeSheet();await reload();renderRoadmap();};
+    $("rdSave").onclick=async()=>{const s=$("rdS").value,e=$("rdE").value;b.rmDates=Object.assign({},b.rmDates||{});
+      if(s)b.rmDates[k]={s,e:(e&&e>=s?e:"")};else delete b.rmDates[k];
+      await put("books",b);closeSheet();await reload();renderRoadmap();};
     $("rdClear").onclick=async()=>{b.rmDates=Object.assign({},b.rmDates||{});delete b.rmDates[k];await put("books",b);closeSheet();await reload();renderRoadmap();};});
 }
 
